@@ -122,13 +122,11 @@ class MesosJobFramework @Inject()(
         case None => log.fine("No tasks scheduled or next task has been disabled.\n")
         case Some((taskId, job)) =>
           if (runningTasks.contains(job.name)) {
-            val deleted = taskManager.removeTask(taskId)
             log.warning("The head of the task queue appears to already be running: " + job.name + "\n")
             generate()
           } else {
             tasks.find(_._2.name == job.name) match {
               case Some((subtaskId, subJob, offer)) =>
-                val deleted = taskManager.removeTask(subtaskId)
                 log.warning("Found job in queue that is already scheduled for launch with this offer set: " + subJob.name + "\n")
                 generate()
               case None =>
@@ -232,10 +230,9 @@ class MesosJobFramework @Inject()(
         log.info("Task with id '%s' LOST".format(taskStatus.getTaskId.getValue))
         scheduler.handleFailedTask(taskStatus)
       case TaskState.TASK_RUNNING =>
-        log.info("Task with id '%s' RUNNING. Removing persistence task.".format(taskStatus.getTaskId.getValue))
-        taskManager.removeTask(taskStatus.getTaskId.getValue)
+        log.info("Task with id '%s' RUNNING".format(taskStatus.getTaskId.getValue))
       case TaskState.TASK_KILLED =>
-        log.info("Task with id '%s' KILLED.".format(taskStatus.getTaskId.getValue))
+        log.info("Task with id '%s' KILLED".format(taskStatus.getTaskId.getValue))
         scheduler.handleKilledTask(taskStatus)
       case _ =>
         log.warning("Unknown TaskState:" + taskStatus.getState + " for task: " + taskStatus.getTaskId.getValue)

@@ -67,7 +67,6 @@ class TaskManagementResource @Inject()(
       require(jobGraph.lookupVertex(jobName).isDefined, "Job '%s' not found".format(jobName))
       val job = jobGraph.getJobForName(jobName).get
       taskManager.cancelTasks(job)
-      taskManager.removeTasks(job)
       Response.noContent().build()
     } catch {
       case ex: Exception =>
@@ -82,7 +81,6 @@ class TaskManagementResource @Inject()(
   def purge(): Response = {
     log.info("Task purge request received")
     try {
-      persistenceStore.purgeTasks()
       taskManager.queues.foreach(_.clear())
       Response.noContent().build()
     } catch {

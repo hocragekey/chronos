@@ -79,28 +79,6 @@ object TaskUtils {
     }
   }
 
-  def loadTasks(taskManager: TaskManager, persistenceStore: PersistenceStore) {
-    val allTasks = persistenceStore.getTasks
-    val validTasks = TaskUtils.getDueTimes(allTasks)
-
-    validTasks.foreach({ case (key, valueTuple) =>
-      val (job, due, attempt) = valueTuple
-      taskManager.removeTask(key)
-      if (due == 0L) {
-        log.info("Enqueuing at once")
-        taskManager.scheduleTask(TaskUtils.getTaskId(job, DateTime.now(DateTimeZone.UTC), attempt), job, persist = true)
-      } else if (due > 0L) {
-        log.info("Enqueuing later")
-        val newDueTime = DateTime.now(DateTimeZone.UTC).plus(due)
-        taskManager.scheduleDelayedTask(
-          new ScheduledTask(TaskUtils.getTaskId(job, newDueTime, attempt), newDueTime, job, taskManager), due, persist = true)
-      } else {
-        log.info(("Filtering out old task '" +
-          "%s' overdue by '%d' ms and removing from store.").format(key, due))
-      }
-    })
-  }
-
   def getTaskId(job: BaseJob, due: DateTime, attempt: Int = 0, arguments: Option[String] = None): String = {
     val args: String = arguments.getOrElse(job.arguments.mkString(" ")).filterNot(commandInjectionFilter)
     taskIdTemplate.format(due.getMillis, attempt, job.name, args)

@@ -118,7 +118,7 @@ class JobSchedulerSpec extends SpecificationWithJUnit with Mockito {
       }
       date must_== DateTime.parse("2012-01-01T00:07:00.000Z")
 
-      there were 6.times(mockTaskManager).scheduleDelayedTask(any[ScheduledTask], anyLong, any[Boolean])
+      there were 6.times(mockTaskManager).scheduleDelayedTask(any[ScheduledTask], anyLong)
     }
 
     "Future task beyond time-horizon should not be scheduled" in {
@@ -162,7 +162,7 @@ class JobSchedulerSpec extends SpecificationWithJUnit with Mockito {
 
       val newScheduleStreams = scheduler.iteration(DateTime.parse("2012-01-01T00:01:00.000Z"), List(jobStream))
       newScheduleStreams.size must beEqualTo(0)
-      there were 60.times(mockTaskManager).scheduleDelayedTask(any[ScheduledTask], anyLong, any[Boolean])
+      there were 60.times(mockTaskManager).scheduleDelayedTask(any[ScheduledTask], anyLong)
     }
 
     "Infinite task must be scheduled" in {
@@ -182,7 +182,7 @@ class JobSchedulerSpec extends SpecificationWithJUnit with Mockito {
       val scheduler = mockScheduler(horizon, mockTaskManager, mockGraph)
       val newScheduleStreams = scheduler.iteration(DateTime.parse("2012-01-01T00:01:01.000Z"), List(jobStream))
 
-      there was one(mockTaskManager).scheduleDelayedTask(any[ScheduledTask], any[Long], any[Boolean])
+      there was one(mockTaskManager).scheduleDelayedTask(any[ScheduledTask], any[Long])
     }
 
     //TODO(FL): Write test that ensures that other tasks don't cause a stackoverflow
@@ -220,7 +220,6 @@ class JobSchedulerSpec extends SpecificationWithJUnit with Mockito {
     val mockTaskManager = mock[TaskManager]
     val jobGraph = mock[JobGraph]
     val store = mock[PersistenceStore]
-    store.getTaskIds(Some(anyString)).returns(List())
 
     jobGraph.lookupVertex(job1.name).returns(Some(job1))
     jobGraph.lookupVertex(job2.name).returns(Some(job2))

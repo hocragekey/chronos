@@ -207,7 +207,6 @@ class JobScheduler @Inject()(val scheduleHorizon: Period,
       }
 
       taskManager.cancelTasks(job)
-      taskManager.removeTasks(job)
       jobsObserver.apply(JobRemoved(job))
 
       if (persist) {
@@ -252,8 +251,6 @@ class JobScheduler @Inject()(val scheduleHorizon: Period,
       log.warning("Found old or invalid task, ignoring!")
       return
     }
-
-    persistenceStore.removeTask(taskId)
 
     val jobName = TaskUtils.getJobNameForTaskId(taskId)
     val jobOption = jobGraph.lookupVertex(jobName)
@@ -399,7 +396,6 @@ class JobScheduler @Inject()(val scheduleHorizon: Period,
             val delayedTask = new Runnable {
               def run() {
                 log.info(s"Enqueuing failed task $newTaskId")
-                taskManager.persistTask(newTaskId, job)
                 taskManager.enqueue(newTaskId, job.highPriority)
               }
             }
@@ -485,11 +481,20 @@ class JobScheduler @Inject()(val scheduleHorizon: Period,
     log.info("Starting run loop for JobScheduler. CurrentTime: %s".format(DateTime.now(DateTimeZone.UTC)))
     while (running.get) {
       lock.synchronized {
+        try {
+          log.info("Reloading jobs")
+          JobUtils.loadJobs(this, persistenceStore)
+        } catch {
+          case e: Exception =>
+            log.log(Level.SEVERE, "Loading tasks or jobs failed. Exiting.", e)
+            System.exit(1)
+        }
+      }
+      lock.synchronized {
         log.info("Size of streams: %d".format(streams.size))
         streams = iteration(dateSupplier(), streams)
       }
       Thread.sleep(scheduleHorizon.toStandardDuration.getMillis)
-      //TODO(FL): This can be inaccurate if the horizon >= 1D on daylight savings day and when leap seconds are introduced.
     }
     log.info("No longer running.")
   }
@@ -619,19 +624,6 @@ class JobScheduler @Inject()(val scheduleHorizon: Period,
     log.info("Elected as leader.")
 
     running.set(true)
-    lock.synchronized {
-      try {
-        //It's important to load the tasks first, otherwise a job that's due will trigger a task right away.
-        log.info("Loading tasks")
-        TaskUtils.loadTasks(taskManager, persistenceStore)
-        log.info("Loading jobs")
-        JobUtils.loadJobs(this, persistenceStore)
-      } catch {
-        case e: Exception =>
-          log.log(Level.SEVERE, "Loading tasks or jobs failed. Exiting.", e)
-          System.exit(1)
-      }
-    }
 
     val jobScheduler = this
     //Consider making this a background thread or control via an executor.
@@ -662,7 +654,7 @@ class JobScheduler @Inject()(val scheduleHorizon: Period,
     } else {
       val encapsulatedJob = taskOption.get.job
       log.info("Scheduling:" + taskOption.get.job.name)
-      taskManager.scheduleDelayedTask(taskOption.get, taskManager.getMillisUntilExecution(taskOption.get.due), persist = true)
+      taskManager.scheduleDelayedTask(taskOption.get, taskManager.getMillisUntilExecution(taskOption.get.due))
       /*TODO(FL): This needs some refactoring. Ideally, the task should only be persisted once it has been submitted
                   to chronos, however if we were to do this with the current design, there could be missed tasks if
                   the scheduler went down before having fired off the jobs, since we're scheduling ahead of time.

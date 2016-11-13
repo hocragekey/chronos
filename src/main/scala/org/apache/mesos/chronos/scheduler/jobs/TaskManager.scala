@@ -84,8 +84,6 @@ class TaskManager @Inject()(val listeningExecutor: ListeningScheduledExecutorSer
 
       //If the job was deleted after the taskId was added to the queue, the task could be empty.
       if (jobOption.isEmpty) {
-        //remove invalid task
-        removeTask(taskId)
         None
       } else if (jobOption.get.disabled) {
         jobsObserver.apply(JobExpired(jobOption.get, taskId))
@@ -143,10 +141,6 @@ class TaskManager @Inject()(val listeningExecutor: ListeningScheduledExecutorSer
     queues.foreach(_.clear())
   }
 
-  def removeTask(taskId: String) {
-    persistenceStore.removeTask(taskId)
-  }
-
   def enqueue(taskId: String, highPriority: Boolean) {
     /* Don't want to change previous logging if we don't have to... */
     log.fine(s"Adding task '$taskId' to ${if (highPriority) "high priority" else ""} queue")
@@ -176,7 +170,7 @@ class TaskManager @Inject()(val listeningExecutor: ListeningScheduledExecutorSer
    * @param taskId task to run
    */
   def scheduleTask(taskId: String, job: BaseJob, persist: Boolean) {
-    scheduleDelayedTask(new ScheduledTask(taskId, DateTime.now(DateTimeZone.UTC), job, this), 0, persist)
+    scheduleDelayedTask(new ScheduledTask(taskId, DateTime.now(DateTimeZone.UTC), job, this), 0)
   }
 
   /**
@@ -186,18 +180,11 @@ class TaskManager @Inject()(val listeningExecutor: ListeningScheduledExecutorSer
    * @param task the wrapped task
    * @param delay the delay in milliseconds
    */
-  def scheduleDelayedTask(task: ScheduledTask, delay: Long, persist: Boolean) {
+  def scheduleDelayedTask(task: ScheduledTask, delay: Long) {
     log.info("Scheduling task '%s' with delay: '%d'".format(task.taskId, delay))
-    if (persist) {
-      persistTask(task.taskId, task.job)
-    }
     val futureTask = ListenableFutureTask.create(task)
     val f = listeningExecutor.schedule(futureTask, delay, TimeUnit.MILLISECONDS)
     taskMapping.getOrElseUpdate(task.job.name, new mutable.ListBuffer()) += ((task.taskId, f))
-  }
-
-  def persistTask(taskId: String, baseJob: BaseJob) {
-    persistenceStore.persistTask(taskId, JobUtils.toBytes(baseJob))
   }
 
   /**
@@ -228,14 +215,4 @@ class TaskManager @Inject()(val listeningExecutor: ListeningScheduledExecutorSer
     })
   }
 
-  /**
-   * Removes all tasks from the persistence store that belong to a job.
-   * @param baseJob BaseJob for which to remove all tasks from persistence store.
-   */
-  def removeTasks(baseJob: BaseJob) {
-    log.info("Removing all tasks for job:" + baseJob)
-    persistenceStore.getTaskIds(Some(baseJob.name)).foreach({ x =>
-      persistenceStore.removeTask(x)
-    })
-  }
 }
